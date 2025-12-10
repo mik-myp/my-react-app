@@ -2,6 +2,7 @@ name: Deploy to Aliyun ECS
 
 on:
   push:
+    # 注意：如果你的默认分支是 `main`，请将这里改为 [main]
     branches: [master]
 
 jobs:
@@ -12,16 +13,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2. 设置Node.js环境
+      # 2. 设置Node.js环境 (关键修改1：使用稳定的LTS版本)
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "22.x"
+          # 将版本从有问题的 22.x 改为长期支持(LTS)的 20.x
+          node-version: "20.x"
+          # 启用缓存，可以加速后续的依赖安装
+          cache: "npm"
 
-      # 3. 安装依赖并构建
+      # 3. 安装依赖并构建 (关键修改2：清理后使用install)
       - name: Install dependencies and build
         run: |
-          npm ci
+          # 清理可能引起问题的node_modules和锁文件
+          rm -rf node_modules
+          rm -f package-lock.json
+          # 使用 npm install 重新安装所有依赖，生成新的锁文件
+          npm install
+          # 执行构建
           npm run build
 
       # 4. 将构建产物部署到阿里云服务器
@@ -32,6 +41,16 @@ jobs:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
           TARGET: ${{ secrets.REMOTE_TARGET }}
+          # 在部署前执行的命令（可选）
           SCRIPT_BEFORE: |
-            # 可选：在部署前备份旧版本或执行其他命令
-            echo “开始部署...”
+            echo "开始部署..."
+            # 例如，你可以在这里备份旧的构建产物
+            # timestamp=$(date +%Y%m%d%H%M%S)
+            # backup_dir="/var/www/backups/my-react-app_$timestamp"
+            # [ -d "${{ secrets.REMOTE_TARGET }}/dist" ] && cp -r "${{ secrets.REMOTE_TARGET }}/dist" "$backup_dir"
+          # 在部署后执行的命令（推荐）：验证或重启服务
+          SCRIPT_AFTER: |
+            echo "部署完成！"
+            # 确保Nginx配置指向了正确的dist目录（根据你之前的配置）
+            # 如果需要，可以在这里重启Nginx（请谨慎，需sudo权限且需配置免密）
+            # sudo systemctl restart nginx
